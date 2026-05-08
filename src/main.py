@@ -56,28 +56,33 @@ def run_shell() -> None:
 
         match command.lower():
             case "build":
-                print("build: not implemented yet")
-                # TODO Phase 2:
-                #   crawler = Crawler(TARGET_URL, POLITENESS_SECONDS)
-                #   for url, html in crawler.crawl():
-                #       indexer.add_page(url, html)
-                #   indexer.save()
-                #   search = SearchEngine(indexer.index)
+                crawler = Crawler(TARGET_URL, POLITENESS_SECONDS)
+                page_count = 0
+                print(f"Crawling {TARGET_URL} (politeness: {POLITENESS_SECONDS}s between requests)...")
+                for url, html in crawler.crawl():
+                    indexer.add_page(url, html)
+                    page_count += 1
+                    print(f"  [{page_count}] indexed: {url}")
+                indexer.save()
+                search = SearchEngine(indexer.index)
+                print(f"Done. {page_count} pages indexed. Index saved to '{INDEX_PATH}'.")
 
             case "load":
-                print("load: not implemented yet")
-                # TODO Phase 2:
-                #   indexer.load()
-                #   search = SearchEngine(indexer.index)
+                try:
+                    indexer.load()
+                    search = SearchEngine(indexer.index)
+                    word_count = len(indexer.index)
+                    print(f"Index loaded from '{INDEX_PATH}' ({word_count} unique words).")
+                except FileNotFoundError as e:
+                    print(f"Error: {e}")
 
             case "print":
                 if not args:
                     print("Usage: print <word>")
+                elif search is None:
+                    print("No index loaded. Run 'build' or 'load' first.")
                 else:
-                    print(f"print '{args[0]}': not implemented yet")
-                    # TODO Phase 3:
-                    #   if search is None: print("Run 'build' or 'load' first")
-                    #   else: search.print_word(args[0])
+                    search.print_word(args[0])
 
             case "find":
                 if not args:

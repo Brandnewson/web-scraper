@@ -1,32 +1,103 @@
 """
 test_indexer.py — Tests for the Indexer class
-
-Phase 1: Placeholder — verifies the module imports cleanly.
-Phase 2: Will add tests for tokenisation, index construction,
-         case normalisation, position tracking, serialisation.
 """
 
+import json
 from pathlib import Path
+
+import pytest
 
 from src.indexer import Indexer
 
 
 class TestIndexerInit:
     def test_indexer_instantiates(self, tmp_path: Path) -> None:
-        """Indexer can be constructed with a file path."""
-        index_path = tmp_path / "index.json"
-        indexer = Indexer(index_path=index_path)
-        assert indexer.index_path == index_path
+        indexer = Indexer(index_path=tmp_path / "index.json")
+        assert indexer.index_path == tmp_path / "index.json"
 
     def test_index_starts_empty(self, tmp_path: Path) -> None:
-        """A freshly created Indexer has an empty index."""
         indexer = Indexer(index_path=tmp_path / "index.json")
         assert indexer.index == {}
 
-    # TODO Phase 2: test_tokenise_lowercases_text
-    # TODO Phase 2: test_tokenise_strips_punctuation
-    # TODO Phase 2: test_add_page_records_frequency
-    # TODO Phase 2: test_add_page_records_positions
-    # TODO Phase 2: test_save_creates_json_file
-    # TODO Phase 2: test_load_restores_index
-    # TODO Phase 2: test_case_insensitive_deduplication
+
+class TestTokenise:
+    def test_lowercases(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        assert "hello" in indexer._tokenise("HELLO World")
+
+    def test_strips_punctuation(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        tokens = indexer._tokenise("hello, world!")
+        assert "hello" in tokens
+        assert "world" in tokens
+
+    def test_discards_single_chars(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        tokens = indexer._tokenise("a big cat")
+        assert "a" not in tokens
+        assert "big" in tokens
+
+    def test_empty_string_returns_empty_list(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        assert indexer._tokenise("") == []
+
+
+class TestAddPage:
+    def test_records_frequency(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        html = "<html><body>wisdom wisdom wisdom</body></html>"
+        indexer.add_page("https://example.com/", html)
+        assert indexer.index["wisdom"]["https://example.com/"]["freq"] == 3
+
+    def test_records_positions(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        # Tokens after filtering single chars: ["the", "cat", "sat"]
+        html = "<html><body>the cat sat</body></html>"
+        indexer.add_page("https://example.com/", html)
+        positions = indexer.index["cat"]["https://example.com/"]["positions"]
+        assert isinstance(positions, list)
+        assert len(positions) == 1
+
+    def test_case_insensitive(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        html = "<html><body>Wisdom WISDOM wisdom</body></html>"
+        indexer.add_page("https://example.com/", html)
+        assert indexer.index["wisdom"]["https://example.com/"]["freq"] == 3
+
+    def test_multiple_pages(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        indexer.add_page("https://example.com/1", "<body>life is short</body>")
+        indexer.add_page("https://example.com/2", "<body>life is long</body>")
+        assert len(indexer.index["life"]) == 2
+
+
+class TestSaveLoad:
+    def test_save_creates_json_file(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        indexer.add_page("https://example.com/", "<body>hello world</body>")
+        indexer.save()
+        assert (tmp_path / "index.json").exists()
+
+    def test_load_restores_index(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        indexer.add_page("https://example.com/", "<body>wisdom</body>")
+        indexer.save()
+
+        indexer2 = Indexer(tmp_path / "index.json")
+        indexer2.load()
+        assert "wisdom" in indexer2.index
+
+    def test_save_load_roundtrip_preserves_data(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "index.json")
+        html = "<body>the quick brown fox</body>"
+        indexer.add_page("https://example.com/", html)
+        indexer.save()
+
+        indexer2 = Indexer(tmp_path / "index.json")
+        indexer2.load()
+        assert indexer2.index == indexer.index
+
+    def test_load_raises_if_no_file(self, tmp_path: Path) -> None:
+        indexer = Indexer(tmp_path / "missing.json")
+        with pytest.raises(FileNotFoundError):
+            indexer.load()

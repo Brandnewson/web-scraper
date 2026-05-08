@@ -43,7 +43,15 @@ class SearchEngine:
               https://quotes.toscrape.com/page/1/  freq=1  positions=[14]
               https://quotes.toscrape.com/page/3/  freq=2  positions=[5, 22]
         """
-        raise NotImplementedError("TODO: Phase 3 — implement print_word")
+        term = self._normalise_term(word)
+        if term not in self._index:
+            print(f'"{word}" not found in index.')
+            return
+
+        postings = self._index[term]
+        print(f'"{term}" found in {len(postings)} page(s):')
+        for url, data in sorted(postings.items()):
+            print(f"  {url}  freq={data['freq']}  positions={data['positions']}")
 
     def find(self, query: str) -> list[str]:
         """
@@ -67,8 +75,9 @@ class SearchEngine:
     # ------------------------------------------------------------------
 
     def _normalise_term(self, term: str) -> str:
-        """Lowercase and strip punctuation from a single query term."""
-        raise NotImplementedError("TODO: Phase 3 — implement term normalisation")
+        """Lowercase and strip non-alphabetic characters from a single query term."""
+        import re
+        return re.sub(r"[^a-z]", "", term.lower())
 
     def _intersect(self, term_urls: list[set[str]]) -> set[str]:
         """

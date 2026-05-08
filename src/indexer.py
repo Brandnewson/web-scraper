@@ -20,8 +20,11 @@ Index structure:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import TypedDict
+
+from bs4 import BeautifulSoup
 
 
 class Posting(TypedDict):
@@ -63,15 +66,31 @@ class Indexer:
         html : str
             Raw HTML — text will be extracted before indexing.
         """
-        raise NotImplementedError("TODO: Phase 2 — extract text, tokenise, update index")
+        text = self._extract_text(html)
+        tokens = self._tokenise(text)
+
+        for position, token in enumerate(tokens):
+            if token not in self._index:
+                self._index[token] = {}
+            if url not in self._index[token]:
+                self._index[token][url] = {"freq": 0, "positions": []}
+            self._index[token][url]["freq"] += 1
+            self._index[token][url]["positions"].append(position)
 
     def save(self) -> None:
         """Serialise the current index to self.index_path as JSON."""
-        raise NotImplementedError("TODO: Phase 2 — implement JSON serialisation")
+        self.index_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.index_path, "w", encoding="utf-8") as f:
+            json.dump(self._index, f, indent=2)
 
     def load(self) -> None:
         """Load a previously saved index from self.index_path."""
-        raise NotImplementedError("TODO: Phase 2 — implement JSON deserialisation")
+        if not self.index_path.exists():
+            raise FileNotFoundError(
+                f"No index found at '{self.index_path}'. Run 'build' first."
+            )
+        with open(self.index_path, encoding="utf-8") as f:
+            self._index = json.load(f)
 
     @property
     def index(self) -> InvertedIndex:
@@ -87,12 +106,17 @@ class Indexer:
         Normalise and tokenise a string.
 
         - Lowercase
-        - Strip punctuation
+        - Strip non-alphabetic characters
         - Split on whitespace
-        - Return list of tokens (preserving order for position tracking)
+        - Discard single-character tokens
         """
-        raise NotImplementedError("TODO: Phase 2 — implement tokeniser")
+        lowered = text.lower()
+        cleaned = re.sub(r"[^a-z\s]", "", lowered)
+        return [token for token in cleaned.split() if len(token) > 1]
 
     def _extract_text(self, html: str) -> str:
         """Extract visible text content from raw HTML using BeautifulSoup."""
-        raise NotImplementedError("TODO: Phase 2 — implement text extraction")
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup.find_all(["script", "style"]):
+            tag.decompose()
+        return soup.get_text(separator=" ", strip=True)
